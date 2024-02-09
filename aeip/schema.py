@@ -183,8 +183,36 @@ class Resource:
         self.ref = ref.ref
         self.tenant = ref.tenant
         self.container = ref.container
-        self.title = body['title']
-        self.version = body['version']
+    
+    @property
+    def version(self):
+        return self.body['version']
+    
+    @property
+    def title(self):
+        return self.body['title']
+
+    @title.setter
+    def title(self, value):
+        self.api.request('PATCH', id=self.id, json=[{
+            'op': 'replace',
+            'path': '/title',
+            'value': value,
+        }])
+        self.body['title'] = value
+
+    @property
+    def description(self):
+        return self.body['description']
+
+    @description.setter
+    def description(self, value):
+        self.api.request('PATCH', id=self.id, json=[{
+            'op': 'replace',
+            'path': '/description',
+            'value': value,
+        }])
+        self.body['description'] = value
     
     def __getitem__(self, key):
         return self.body[key]
