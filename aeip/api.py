@@ -15,6 +15,9 @@ class Api:
         self.base_url = 'https://platform.adobe.io'
         self.load_config_file(config_file)
         self.schemas = schema.SchemaCollection(self)
+        self.classes = schema.ClassCollection(self)
+        self.field_groups = schema.FieldGroupCollection(self)
+        self.behaviors = schema.BehaviorCollection(self)
         self.schema_registry = schema.ResourceCollection(self)
 
     @property

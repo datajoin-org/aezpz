@@ -42,7 +42,7 @@ Container = Literal['global','tenant']
 
 class SchemaRef:
     container: Container
-    resource: Optional[str]
+    resource: Optional[ResourceType]
     tenant: Optional[str]
     uuid: str
     id: str
@@ -151,7 +151,7 @@ class ResourceCollection:
             raise Exception(f"Expected a resource of type ({','.join(self.resources)}) got {ref.resource}")
         request_handler = RequestHandler(self.api, ref.container, resource)
         body = request_handler.request('GET', ref.id)
-        return init_resource_class(ref.resource, request_handler, body)
+        return init_resource_class(resource, request_handler, body)
 
     def get_by_title(self, title) -> Resource:
         resources = self.findall(title=title)
@@ -222,9 +222,6 @@ class Resource:
         }])
         self.body['description'] = value
     
-    def __getitem__(self, key):
-        return self.body[key]
-    
     def delete(self):
         self.api.request('DELETE', id=self.id)
 
@@ -234,6 +231,15 @@ class Resource:
 class SchemaCollection(ResourceCollection):
     def __init__(self, api: Api):
         super().__init__(api, resources=['schemas'])
+    
+    def get(self, id) -> Schema:
+        return super().get(id)
+    
+    def get_by_title(self, title) -> Schema:
+        return super().get_by_title(title)
+    
+    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[Schema]:
+        return super().findall(container, **params)
     
     def create(
             self,
@@ -261,32 +267,36 @@ class SchemaCollection(ResourceCollection):
 
 class Schema(Resource):
 
-    def create(
-            self,
-            title: str,
-            extends: Classes,
-            description: str='',
-            field_groups: list[FieldGroup] = [],
-        ):
-        assert isinstance(extends, Classes), 'Must inherit from one class'
-        for field_group in field_groups:
-            assert isinstance(field_group, FieldGroup)
-        self.api.create({
-            'type': 'object',
-            'title': title,
-            'description': description,
-            'allOf': [
-                { '$ref': ref.id }
-                for ref in ([extends] + field_groups)
-            ]
-        })
+    def extends(self):
+        return self.api.api.classes.get(self.body['meta:class'])
+
+    def field_groups(self):
+        field_groups = []
+        for ref in self.body['allOf']:
+            if SchemaRef(ref['$ref']).resource == 'fieldgroups':
+                field_group = self.api.api.field_groups.get(ref['$ref'])
+                field_groups.append(field_group)
+        return field_groups
 
     def add_field_group(self, field_group: FieldGroup):
         assert isinstance(field_group, FieldGroup)
-        r = self.request('PATCH', id=self.altId, json=[
+        r = self.api.request('PATCH', id=self.id, json=[
             { 'op': 'add', 'path': '/allOf/-', 'value': {'$ref': field_group.id} }
         ])
         return self(**r)
+
+class ClassCollection(ResourceCollection):
+    def __init__(self, api: Api):
+        super().__init__(api, resources=['classes'])
+    
+    def get(self, id) -> Classes:
+        return super().get(id)
+    
+    def get_by_title(self, title) -> Classes:
+        return super().get_by_title(title)
+    
+    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[Classes]:
+        return super().findall(container, **params)
 
 class Classes(Resource):
     @classmethod
@@ -313,6 +323,19 @@ class Classes(Resource):
             ]
         }
 
+class FieldGroupCollection(ResourceCollection):
+    def __init__(self, api: Api):
+        super().__init__(api, resources=['fieldgroups'])
+
+    def get(self, id) -> FieldGroup:
+        return super().get(id)
+    
+    def get_by_title(self, title) -> FieldGroup:
+        return super().get_by_title(title)
+    
+    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[FieldGroup]:
+        return super().findall(container, **params)
+
 class FieldGroup(Resource):
     @classmethod
     def props(
@@ -337,8 +360,34 @@ class FieldGroup(Resource):
             }]
         }
 
+class DataTypeCollection(ResourceCollection):
+    def __init__(self, api: Api):
+        super().__init__(api, resources=['datatypes'])
+
+    def get(self, id) -> DataType:
+        return super().get(id)
+    
+    def get_by_title(self, title) -> DataType:
+        return super().get_by_title(title)
+    
+    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[DataType]:
+        return super().findall(container, **params)
+
 class DataType(Resource):
     pass
+
+class BehaviorCollection(ResourceCollection):
+    def __init__(self, api: Api):
+        super().__init__(api, resources=['behaviors'])
+
+    def get(self, id) -> Behavior:
+        return super().get(id)
+    
+    def get_by_title(self, title) -> Behavior:
+        return super().get_by_title(title)
+    
+    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[Behavior]:
+        return super().findall(container, **params)
 
 class Behavior(Resource):
     pass
