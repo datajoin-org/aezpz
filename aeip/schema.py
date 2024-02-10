@@ -153,6 +153,14 @@ class ResourceCollection:
         body = request_handler.request('GET', ref.id)
         return init_resource_class(ref.resource, request_handler, body)
 
+    def get_by_title(self, title) -> Resource:
+        resources = self.findall(title=title)
+        if len(resources) == 0:
+            raise Exception(f'Could not find resource with the title of "{title}"')
+        if len(resources) > 1:
+            raise Exception(f'Multiple resources have the title of "{title}"')
+        return resources[0]
+
     def findall(self,
                container:Optional[Container] = None,
                **params
