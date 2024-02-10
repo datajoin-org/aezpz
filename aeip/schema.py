@@ -153,12 +153,14 @@ class ResourceCollection:
         body = request_handler.request('GET', ref.id)
         return init_resource_class(resource, request_handler, body)
 
-    def get_by_title(self, title) -> Resource:
-        resources = self.findall(title=title)
+    def find(self,
+             container:Optional[Container] = None,
+             **params) -> Resource:
+        resources = self.findall(container, **params)
         if len(resources) == 0:
-            raise Exception(f'Could not find resource with the title of "{title}"')
+            raise Exception(f'Could not find resource')
         if len(resources) > 1:
-            raise Exception(f'Multiple resources have the title of "{title}"')
+            raise Exception(f'Multiple resources match the parameters')
         return resources[0]
 
     def findall(self,
@@ -235,10 +237,10 @@ class SchemaCollection(ResourceCollection):
     def get(self, id) -> Schema:
         return super().get(id)
     
-    def get_by_title(self, title) -> Schema:
-        return super().get_by_title(title)
+    def find(self, container:Optional[Container] = None, **params) -> Schema:
+        return super().find(container, **params)
     
-    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[Schema]:
+    def findall(self, container:Optional[Container] = None, **params) -> list[Schema]:
         return super().findall(container, **params)
     
     def create(
@@ -292,10 +294,10 @@ class ClassCollection(ResourceCollection):
     def get(self, id) -> Classes:
         return super().get(id)
     
-    def get_by_title(self, title) -> Classes:
-        return super().get_by_title(title)
+    def find(self, container:Optional[Container] = None, **params) -> Classes:
+        return super().find(container, **params)
     
-    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[Classes]:
+    def findall(self, container:Optional[Container] = None, **params) -> list[Classes]:
         return super().findall(container, **params)
 
 class Classes(Resource):
@@ -330,10 +332,10 @@ class FieldGroupCollection(ResourceCollection):
     def get(self, id) -> FieldGroup:
         return super().get(id)
     
-    def get_by_title(self, title) -> FieldGroup:
-        return super().get_by_title(title)
+    def find(self, container:Optional[Container] = None, **params) -> FieldGroup:
+        return super().find(container, **params)
     
-    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[FieldGroup]:
+    def findall(self, container:Optional[Container] = None, **params) -> list[FieldGroup]:
         return super().findall(container, **params)
 
 class FieldGroup(Resource):
@@ -367,10 +369,10 @@ class DataTypeCollection(ResourceCollection):
     def get(self, id) -> DataType:
         return super().get(id)
     
-    def get_by_title(self, title) -> DataType:
-        return super().get_by_title(title)
+    def find(self, container:Optional[Container] = None, **params) -> DataType:
+        return super().find(container, **params)
     
-    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[DataType]:
+    def findall(self, container:Optional[Container] = None, **params) -> list[DataType]:
         return super().findall(container, **params)
 
 class DataType(Resource):
@@ -383,10 +385,10 @@ class BehaviorCollection(ResourceCollection):
     def get(self, id) -> Behavior:
         return super().get(id)
     
-    def get_by_title(self, title) -> Behavior:
-        return super().get_by_title(title)
+    def find(self, container:Optional[Container] = None, **params) -> Behavior:
+        return super().find(container, **params)
     
-    def findall(self, container: Literal['global', 'tenant'] | None = None, **params) -> list[Behavior]:
+    def findall(self, container:Optional[Container] = None, **params) -> list[Behavior]:
         return super().findall(container, **params)
 
 class Behavior(Resource):
