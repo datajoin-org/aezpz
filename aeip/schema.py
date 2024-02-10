@@ -60,6 +60,8 @@ class SchemaRef:
             self.container = 'global' 
             self.tenant = None
             self.resource = None
+            if '.'.join(split[:2]) == 'xdm.data':
+                self.resource = 'behaviors'
             self.uuid = '.'.join(split)
         elif split[1] in RESOURCE_MAP:
             assert len(split) == 3
@@ -260,11 +262,11 @@ class SchemaCollection(ResourceCollection):
             'title': title,
             'description': description,
             'allOf': [
-                { '$ref': ref.id }
+                { '$ref': ref.ref }
                 for ref in ([extends] + field_groups)
             ]
         })
-        return init_resource_class('schemas', request_hander, body)
+        return Schema(request_hander, body)
 
 
 class Schema(Resource):
@@ -300,30 +302,33 @@ class ClassCollection(ResourceCollection):
     def findall(self, container:Optional[Container] = None, **params) -> list[Classes]:
         return super().findall(container, **params)
 
-class Classes(Resource):
-    @classmethod
-    def props(
-            cls,
+    # TODO: also allow direct definitions of fields
+    def create(
+            self,
             title: str,
+            behavior: Behavior,
             description: str = '',
-            extends: list[Classes] = [],
             field_groups: list[FieldGroup] = [],
         ):
+        assert isinstance(behavior, Behavior), 'Must inherit from a behavior'
         if type(extends) is not list:
             extends = [ extends ]
-        for ctx in extends:
-            assert isinstance(ctx, Classes)
         for field_group in field_groups:
             assert isinstance(field_group, FieldGroup)
-        return {
+        request_hander = RequestHandler(self.api, 'tenant', 'classes')
+        body = request_hander.request('POST', json={
             'type': 'object',
             'title': title,
             'description': description,
             'allOf': [
-                { '$ref': ref.id }
-                for ref in (extends + field_groups)
+                { '$ref': ref.ref }
+                for ref in ([behavior] + field_groups)
             ]
-        }
+        })
+        return Classes(request_hander, body)
+
+class Classes(Resource):
+    pass
 
 class FieldGroupCollection(ResourceCollection):
     def __init__(self, api: Api):
@@ -381,6 +386,18 @@ class DataType(Resource):
 class BehaviorCollection(ResourceCollection):
     def __init__(self, api: Api):
         super().__init__(api, resources=['behaviors'])
+    
+    @property
+    def adhoc(self):
+        return self.get('_xdm.data.adhoc')
+    
+    @property
+    def record(self):
+        return self.get('_xdm.data.record')
+
+    @property
+    def time_series(self):
+        return self.get('_xdm.data.time-series')
 
     def get(self, id) -> Behavior:
         return super().get(id)
