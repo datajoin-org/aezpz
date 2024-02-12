@@ -1,3 +1,25 @@
+"""Provide several sample math calculations.
+
+This module allows the user to make mathematical calculations.
+
+Examples:
+    >>> from calculator import calculations
+    >>> calculations.add(2, 4)
+    6.0
+    >>> calculations.multiply(2.0, 4.0)
+    8.0
+    >>> from calculator.calculations import divide
+    >>> divide(4.0, 2)
+    2.0
+
+The module contains the following functions:
+
+- `add(a, b)` - Returns the sum of two numbers.
+- `subtract(a, b)` - Returns the difference of two numbers.
+- `multiply(a, b)` - Returns the product of two numbers.
+- `divide(a, b)` - Returns the quotient of two numbers.
+"""
+
 from __future__ import annotations
 import requests
 import json
@@ -76,5 +98,17 @@ class Api:
             return r.json()
 
 
-def load_config(config_file) -> Api:
+def load_config(config_file: str) -> Api:
+    """ Initialize the api from a config file
+
+    Examples:
+        >>> import aeip
+        >>> api = aeip.load_config("auth.json")
+    
+    Args:
+        config_file: The filepath of your json config file that you downloaded from AEP
+    
+    Returns:
+        The initialized api interface
+    """
     return Api(config_file)
