@@ -186,6 +186,7 @@ class ResourceCollection:
 class Resource:
     api: RequestHandler
     body: dict
+    type: Literal['schema','class','field_group','data_type','behavior'] = None
 
     def __init__(self, api: RequestHandler, body):
         self.api = api
@@ -196,6 +197,7 @@ class Resource:
         self.ref = ref.ref
         self.tenant = ref.tenant
         self.container = ref.container
+        self.type = self.__class__.type
     
     @property
     def version(self):
@@ -263,7 +265,7 @@ class Resource:
         return properties
 
     @property
-    def extends(self):
+    def extends(self) -> list[Resource]:
         if 'meta:extends' not in self.body:
             self.get(full=False)
         self.body.setdefault('meta:extends', [])
@@ -326,6 +328,7 @@ class SchemaCollection(ResourceCollection):
 
 
 class Schema(Resource):
+    type: Literal['schema'] = 'schema'
 
     @property
     def parent(self) -> Class:
@@ -334,8 +337,14 @@ class Schema(Resource):
         return init_resource_from_ref(self.api, self.body['meta:class'], 'classes')
 
     @property
+    def behavior(self) -> Behavior:
+        behaviors = [r for r in self.extends if r.type == 'behavior']
+        assert len(behaviors) == 1
+        return behaviors[0]
+
+    @property
     def field_groups(self) -> list[FieldGroup]:
-        return [resource for resource in self.extends if isinstance(resource, FieldGroup)]
+        return [resource for resource in self.extends if resource.type == 'field_group']
 
     def add_field_group(self, field_group: FieldGroup):
         assert isinstance(field_group, FieldGroup)
@@ -382,7 +391,17 @@ class ClassCollection(ResourceCollection):
         return Class(request_hander, body)
 
 class Class(Resource):
-    pass
+    type: Literal['class'] = 'class'
+    
+    @property
+    def behavior(self) -> Behavior:
+        behaviors = [r for r in self.extends if r.type == 'behavior']
+        assert len(behaviors) == 1
+        return behaviors[0]
+
+    @property
+    def field_groups(self) -> list[FieldGroup]:
+        return [resource for resource in self.extends if resource.type == 'field_group']
 
 class FieldGroupCollection(ResourceCollection):
     def __init__(self, api: Api):
@@ -396,30 +415,37 @@ class FieldGroupCollection(ResourceCollection):
     
     def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[FieldGroup]:
         return super().findall(container, full, **params)
-
-class FieldGroup(Resource):
-    @classmethod
-    def props(
-            cls,
-            tenant: str,
-            title: str,
-            description: str = '',
-            fields: dict[str, dict] = {},
-            extends: list[Class] = [],
-        ):
-        return {
+    
+    def create(self,
+               title: str,
+               description: str = '',
+               fields: dict[str, dict] = {},
+               extends: list[Class] = [],
+               ):
+        for r in extends:
+            assert isinstance(r, Class)
+        request_hander = RequestHandler(self.api, 'tenant', 'fieldgroups')
+        body = request_hander.request('POST', json={
+            'type': 'object',
             'title': title,
             'description': description,
-            'meta:intendedToExtend': [ ctx.id for ctx in extends ],
+            'meta:intendedToExtend': [ ctx.ref for ctx in extends ],
             'allOf': [{
-                'properties': {
-                    tenant: {
-                        'type': 'object',
-                        'properties': fields,
-                    }
-                }
+                'properties': fields,
             }]
-        }
+        })
+        return FieldGroup(request_hander, body)
+        
+
+class FieldGroup(Resource):
+    type: Literal['field_group'] = 'field_group'
+
+    @property
+    def extends(self):
+        if 'meta:intendedToExtend' not in self.body:
+            self.get(full=False)
+        self.body.setdefault('meta:intendedToExtend', [])
+        return [init_resource_from_ref(ref) for ref in self.body['meta:intendedToExtend']]
 
 class DataTypeCollection(ResourceCollection):
     def __init__(self, api: Api):
@@ -433,25 +459,35 @@ class DataTypeCollection(ResourceCollection):
     
     def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[DataType]:
         return super().findall(container, full, **params)
+    
+    def create(self,
+            title: str,
+            description: str = '',
+            properties: dict[str, dict] = {},
+            ):
+        request_hander = RequestHandler(self.api, 'tenant', 'datatypes')
+        body = request_hander.request('POST', json={
+            'type': 'object',
+            'title': title,
+            'description': description,
+            'properties': properties,
+        })
+        return DataType(request_hander, body)
 
 class DataType(Resource):
-    pass
+    type: Literal['data_type'] = 'data_type'
+
 
 class BehaviorCollection(ResourceCollection):
+    adhoc: Behavior
+    record: Behavior
+    time_series: Behavior
+
     def __init__(self, api: Api):
         super().__init__(api, resources=['behaviors'])
-    
-    @cached_property
-    def adhoc(self):
-        return init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/adhoc', 'behaviors')
-    
-    @cached_property
-    def record(self):
-        return init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/record', 'behaviors')
-
-    @cached_property
-    def time_series(self):
-        return init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/time-series', 'behaviors')
+        self.adhoc = init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/adhoc', 'behaviors')
+        self.record = init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/record', 'behaviors')
+        self.time_series = init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/time-series', 'behaviors')
 
     def get(self, id) -> Behavior:
         return super().get(id)
@@ -463,4 +499,4 @@ class BehaviorCollection(ResourceCollection):
         return super().findall(container, full, **params)
 
 class Behavior(Resource):
-    pass
+    type: Literal['behavior'] = 'behavior'
