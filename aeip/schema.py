@@ -1,6 +1,14 @@
 from __future__ import annotations
 from functools import cached_property
 from typing import Any, Optional, Literal, TYPE_CHECKING
+import json
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).absolute().parent
+GLOBAL_RESOURCES = {
+    k: v.split(' ')
+    for k,v in json.loads((SCRIPT_DIR / 'globals.json').read_text()).items()
+}
 
 if TYPE_CHECKING:
     from .api import Api
@@ -10,80 +18,81 @@ RESOURCE_MAP = {
     'schemas': 'schemas',
     'classes': 'classes',
     'datatypes': 'datatypes',
+    'data': 'behaviors',
 }
-
-# There is a bug with adobe's api where some of these references can only be retrieved
-# by their $id and not their altId
-WEIRD_REFS = [
-    ['https://ns.adobe.com/b2b/marketo/marketo-web-url', '_b2b.marketo.marketo-web-url', 'fieldgroups'],
-    ['http://ns.adobe.com/adobecloud/core/1.0',          '_adobecloud.core.1.0',         'datatypes'],
-    ['http://www.iptc.org/episode',                      '_www.iptc.org.episode',        'datatypes'],
-    ['http://www.iptc.org/creator',                      '_www.iptc.org.creator',        'datatypes'],
-    ['http://www.iptc.org/series',                       '_www.iptc.org.series',         'datatypes'],
-    ['http://www.iptc.org/season',                       '_www.iptc.org.season',         'datatypes'],
-    ['http://www.iptc.org/rating',                       '_www.iptc.org.rating',         'datatypes'],
-    ['http://schema.org/GeoShape',                       '_schema.org.GeoShape',         'datatypes'],
-    ['http://schema.org/GeoCoordinates',                 '_schema.org.GeoCoordinates',   'datatypes'],
-    ['http://schema.org/GeoCircle',                      '_schema.org.GeoCircle',        'datatypes'],
-    ['https://id3.org/id3v2.4/audio',                    '_id3.org.id3v2.4.audio',       'datatypes']
-]
 
 def init_resource_class(resource, api: RequestHandler, body: dict):
     RESOURCE_CLASS = {
         'schemas': Schema,
         'fieldgroups': FieldGroup,
-        'classes': Classes,
+        'classes': Class,
         'datatypes': DataType,
         'behaviors': Behavior,
     }
     return RESOURCE_CLASS[resource](api, body)
+
+def init_resource_from_ref(api, ref, resource: ResourceType = None) -> Resource:
+    if isinstance(api, RequestHandler):
+        api = api.api
+    ref = SchemaRef(ref)
+    if ref.resource is None and resource is None:
+        raise Exception('Unable to determine resource type from id')
+    if ref.resource is not None:
+        if resource is not None:
+            assert resource == ref.resource
+        resource = ref.resource
+    RESOURCE_CLASS = {
+        'schemas': Schema,
+        'fieldgroups': FieldGroup,
+        'classes': Class,
+        'datatypes': DataType,
+        'behaviors': Behavior,
+    }
+    request_handler = RequestHandler(api, resource=resource, container=ref.container)
+    return RESOURCE_CLASS[resource](request_handler, {
+        '$id': ref.ref,
+    })
 
 ResourceType = Literal['fieldgroups','schemas','behaviors','classes','datatypes']
 Container = Literal['global','tenant']
 
 class SchemaRef:
     container: Container
-    resource: Optional[ResourceType]
+    resource: ResourceType
     tenant: Optional[str]
     uuid: str
     id: str
     ref: str
 
     def __init__(self, ref):
-        split = [None, None]
-        if ref.startswith('https://ns.adobe.com/'):
-            split = ref[len('https://ns.adobe.com/'):].split('/')
+        if ref.startswith('http://') or ref.startswith('https://'):
+            ref = ref.split('://', 1)[-1]
+            split = ref.split('/')
+            if split[0] == 'ns.adobe.com':
+                split = split[1:]
         elif ref.startswith('_'):
             split = ref[1:].split('.')
+        else:
+            raise Exception(f'unable to parse ref: "{ref}"')
         assert len(split) > 1
 
-        if split[0] in ('xdm','experience'):
-            self.container = 'global' 
+        uuid = '.'.join(split)
+        if uuid in GLOBAL_RESOURCES:
+            self.resource, self.ref = GLOBAL_RESOURCES[uuid]
+            self.container = 'global'
             self.tenant = None
-            self.resource = None
-            if '.'.join(split[:2]) == 'xdm.data':
-                self.resource = 'behaviors'
-            self.uuid = '.'.join(split)
+            self.uuid = uuid
+            self.id = '_' + uuid
         elif split[1] in RESOURCE_MAP:
             assert len(split) == 3
             self.container = 'tenant'
             self.tenant = split[0]
             self.resource = RESOURCE_MAP[split[1]]
             self.uuid = split[2]
+            self.id = '_' + uuid
+            self.ref = 'https://ns.adobe.com/' + '/'.join(split)
         else:
-            for weird in WEIRD_REFS:
-                if weird[0] == ref or weird[1] == ref:
-                    self.container = 'global'
-                    self.tenant = None
-                    self.ref = weird[0]
-                    self.id = weird[1]
-                    self.resource = weird[2]
-                    self.uuid = self.id[1:]
-                    return
-            raise Exception(f'Unable to parse reference: "{ref}"')
-
-        self.id = '_' + '.'.join(split)
-        self.ref = 'https://ns.adobe.com/' + '/'.join(split)
+            raise Exception(f'unable to parse ref: "{ref}"')
 
 class RequestHandler:
     api: Api
@@ -141,20 +150,10 @@ class ResourceCollection:
         self.resources = resources
     
     def get(self, id, full:bool=False) -> Resource:
-        ref = SchemaRef(id)
-        resource = ref.resource
-        if resource is None:
-            if len(self.resources) > 1:
-                # TODO: iterate through resources and see which one
-                # doesn't throw a 404 error to determine resource type
-                raise Exception('Unable to determine resource type from id')
-            else:
-                resource = self.resources[0]
-        elif resource not in self.resources:
-            raise Exception(f"Expected a resource of type ({','.join(self.resources)}) got {ref.resource}")
-        request_handler = RequestHandler(self.api, ref.container, resource)
-        body = request_handler.request('GET', id=ref.id, xed='full' if full else None)
-        return init_resource_class(resource, request_handler, body)
+        resource_type = self.resources[0] if len(self.resources) == 1 else None
+        resource = init_resource_from_ref(id, resource=resource_type)
+        resource.get(full=full)
+        return resource
 
     def find(self,
              container: Optional[Container] = None,
@@ -248,7 +247,7 @@ class Resource:
         self.body.setdefault('allOf', [])
         properties = {}
         for record in self.body['allOf']:
-            definition = record.get('properties', {})
+            definition = record
             if record.get('$ref','').startswith('#'):
                 assert 'properties' not in record, 'unexpected "properties" and "$ref" definition'
                 assert record['$ref'].startswith('#/definitions/'), 'unexpected non-definitions reference'
@@ -256,10 +255,22 @@ class Resource:
                 assert '/' not in field, 'unexpected nested definition reference'
                 definition = self.body.get('definitions',{}).get(field)
                 assert definition is not None, 'reference to missing definition'
-            for key,val in definition:
+                assert 'properties' in definition, 'expected definition to be an object'
+
+            for key,val in definition.get('properties',{}).items():
                 assert key not in properties, 'unhandled merging of definitions'
                 properties[key] = val
         return properties
+
+    @property
+    def extends(self):
+        if 'meta:extends' not in self.body:
+            self.get(full=False)
+        self.body.setdefault('meta:extends', [])
+        extends = []
+        for ref in self.body['meta:extends']:
+            extends.append(init_resource_from_ref(self.api, ref))
+        return extends
     
     def get(self, full=True):
         r = self.api.request('GET', id=self.id, xed='full' if full else None)
@@ -293,39 +304,38 @@ class SchemaCollection(ResourceCollection):
     def create(
             self,
             title: str,
-            extends: Classes,
+            parent: Class,
             description: str='',
             field_groups: list[FieldGroup] = [],
         ) -> Schema:
-        assert isinstance(extends, Classes), 'Must inherit from a class'
+        assert isinstance(parent, Class), 'Must inherit from a class'
         for field_group in field_groups:
             assert isinstance(field_group, FieldGroup)
 
-        request_hander = RequestHandler(self.api, 'tenant', 'schemas')
-        body = request_hander.request('POST', json={
+        request_handler = RequestHandler(self.api, 'tenant', 'schemas')
+        body = request_handler.request('POST', json={
             'type': 'object',
             'title': title,
             'description': description,
             'allOf': [
                 { '$ref': ref.ref }
-                for ref in ([extends] + field_groups)
+                for ref in ([parent] + field_groups)
             ]
         })
-        return Schema(request_hander, body)
+        return Schema(request_handler, body)
 
 
 class Schema(Resource):
 
-    def extends(self):
-        return self.api.api.classes.get(self.body['meta:class'])
+    @property
+    def parent(self) -> Class:
+        if 'meta:class' not in self.body:
+            self.get()
+        return init_resource_from_ref(self.api, self.body['meta:class'], 'classes')
 
-    def field_groups(self):
-        field_groups = []
-        for ref in self.body['allOf']:
-            if SchemaRef(ref['$ref']).resource == 'fieldgroups':
-                field_group = self.api.api.field_groups.get(ref['$ref'])
-                field_groups.append(field_group)
-        return field_groups
+    @property
+    def field_groups(self) -> list[FieldGroup]:
+        return [resource for resource in self.extends if isinstance(resource, FieldGroup)]
 
     def add_field_group(self, field_group: FieldGroup):
         assert isinstance(field_group, FieldGroup)
@@ -338,13 +348,13 @@ class ClassCollection(ResourceCollection):
     def __init__(self, api: Api):
         super().__init__(api, resources=['classes'])
     
-    def get(self, id) -> Classes:
+    def get(self, id) -> Class:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> Classes:
+    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> Class:
         return super().find(container, full, **params)
     
-    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[Classes]:
+    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[Class]:
         return super().findall(container, full, **params)
 
     # TODO: also allow direct definitions of fields
@@ -369,9 +379,9 @@ class ClassCollection(ResourceCollection):
                 for ref in ([behavior] + field_groups)
             ]
         })
-        return Classes(request_hander, body)
+        return Class(request_hander, body)
 
-class Classes(Resource):
+class Class(Resource):
     pass
 
 class FieldGroupCollection(ResourceCollection):
@@ -395,7 +405,7 @@ class FieldGroup(Resource):
             title: str,
             description: str = '',
             fields: dict[str, dict] = {},
-            extends: list[Classes] = [],
+            extends: list[Class] = [],
         ):
         return {
             'title': title,
@@ -433,33 +443,15 @@ class BehaviorCollection(ResourceCollection):
     
     @cached_property
     def adhoc(self):
-        return Behavior(
-            RequestHandler(self.api, container='global', resource='behaviors'),
-            {
-                '$id': 'https://ns.adobe.com/xdm/data/adhoc',
-                'title': 'Ad Hoc Schema'
-            }
-        )
+        return init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/adhoc', 'behaviors')
     
     @cached_property
     def record(self):
-        return Behavior(
-            RequestHandler(self.api, container='global', resource='behaviors'),
-            {
-                '$id': 'https://ns.adobe.com/xdm/data/record',
-                'title': 'Record Schema'
-            }
-        )
+        return init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/record', 'behaviors')
 
     @cached_property
     def time_series(self):
-        return Behavior(
-            RequestHandler(self.api, container='global', resource='behaviors'),
-            {
-                '$id': 'https://ns.adobe.com/xdm/data/time-series',
-                'title': 'Time-series Schema'
-            }
-        )
+        return init_resource_from_ref(self.api, 'https://ns.adobe.com/xdm/data/time-series', 'behaviors')
 
     def get(self, id) -> Behavior:
         return super().get(id)

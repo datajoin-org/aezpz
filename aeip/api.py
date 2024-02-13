@@ -40,6 +40,7 @@ class Api:
         self.classes = schema.ClassCollection(self)
         self.field_groups = schema.FieldGroupCollection(self)
         self.behaviors = schema.BehaviorCollection(self)
+        self.data_types = schema.DataTypeCollection(self)
         self.schema_registry = schema.ResourceCollection(self)
 
     @property
