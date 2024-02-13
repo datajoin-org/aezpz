@@ -1,4 +1,5 @@
 from __future__ import annotations
+from functools import cached_property
 from typing import Any, Optional, Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -139,7 +140,7 @@ class ResourceCollection:
         self.api = api
         self.resources = resources
     
-    def get(self, id) -> Resource:
+    def get(self, id, full:bool=False) -> Resource:
         ref = SchemaRef(id)
         resource = ref.resource
         if resource is None:
@@ -152,13 +153,14 @@ class ResourceCollection:
         elif resource not in self.resources:
             raise Exception(f"Expected a resource of type ({','.join(self.resources)}) got {ref.resource}")
         request_handler = RequestHandler(self.api, ref.container, resource)
-        body = request_handler.request('GET', ref.id)
+        body = request_handler.request('GET', id=ref.id, xed='full' if full else None)
         return init_resource_class(resource, request_handler, body)
 
     def find(self,
-             container:Optional[Container] = None,
+             container: Optional[Container] = None,
+             full: bool = True,
              **params) -> Resource:
-        resources = self.findall(container, **params)
+        resources = self.findall(container=container, full=full, **params)
         if len(resources) == 0:
             raise Exception(f'Could not find resource')
         if len(resources) > 1:
@@ -166,7 +168,8 @@ class ResourceCollection:
         return resources[0]
 
     def findall(self,
-               container:Optional[Container] = None,
+               container: Optional[Container] = None,
+               full: bool = False,
                **params
             ) -> list[Resource]:
         containers = ['tenant','global']
@@ -177,8 +180,7 @@ class ResourceCollection:
         for resource in self.resources:
             for container in containers:
                 request_handler = RequestHandler(self.api, container, resource)
-                for record in request_handler.paginate(**params):
-                    # results.append(record)
+                for record in request_handler.paginate(xed=None if full else 'id', **params):
                     results.append(init_resource_class(resource, request_handler, record))
         return results
 
@@ -198,10 +200,14 @@ class Resource:
     
     @property
     def version(self):
+        if 'version' not in self.body:
+            self.get(full=False)
         return self.body['version']
     
     @property
     def title(self):
+        if 'title' not in self.body:
+            self.get(full=False)
         return self.body['title']
 
     @title.setter
@@ -215,6 +221,8 @@ class Resource:
 
     @property
     def description(self):
+        if 'description' not in self.body:
+            self.get(full=False)
         return self.body['description']
 
     @description.setter
@@ -226,11 +234,48 @@ class Resource:
         }])
         self.body['description'] = value
     
+    @property
+    def properties(self):
+        if 'properties' not in self.body:
+            self.get(full=True)
+        self.body.setdefault('properties', {})
+        return self.body['properties']
+
+    @property
+    def definitions(self):
+        if 'allOf' not in self.body:
+            self.get(full=False)
+        self.body.setdefault('allOf', [])
+        properties = {}
+        for record in self.body['allOf']:
+            definition = record.get('properties', {})
+            if record.get('$ref','').startswith('#'):
+                assert 'properties' not in record, 'unexpected "properties" and "$ref" definition'
+                assert record['$ref'].startswith('#/definitions/'), 'unexpected non-definitions reference'
+                field = record['$ref'][len('#/definitions/'):]
+                assert '/' not in field, 'unexpected nested definition reference'
+                definition = self.body.get('definitions',{}).get(field)
+                assert definition is not None, 'reference to missing definition'
+            for key,val in definition:
+                assert key not in properties, 'unhandled merging of definitions'
+                properties[key] = val
+        return properties
+    
+    def get(self, full=True):
+        r = self.api.request('GET', id=self.id, xed='full' if full else None)
+        self.body.update(**r)
+        return self
+    
     def delete(self):
         self.api.request('DELETE', id=self.id)
 
     def __repr__(self):
-        return f'<{self.__class__.__name__} {self.uuid} title="{self.title}" version="{self.version}">'
+        return '<{class_name} {uuid}{title}{version}>'.format(
+            class_name=self.__class__.__name__,
+            uuid=self.uuid,
+            title=f' title="{self.title}"' if 'title' in self.body else '',
+            version=f' version="{self.version}"' if 'version' in self.body else '',
+        )
 
 class SchemaCollection(ResourceCollection):
     def __init__(self, api: Api):
@@ -239,11 +284,11 @@ class SchemaCollection(ResourceCollection):
     def get(self, id) -> Schema:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, **params) -> Schema:
-        return super().find(container, **params)
+    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> Schema:
+        return super().find(container, full, **params)
     
-    def findall(self, container:Optional[Container] = None, **params) -> list[Schema]:
-        return super().findall(container, **params)
+    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[Schema]:
+        return super().findall(container, full, **params)
     
     def create(
             self,
@@ -296,13 +341,14 @@ class ClassCollection(ResourceCollection):
     def get(self, id) -> Classes:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, **params) -> Classes:
-        return super().find(container, **params)
+    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> Classes:
+        return super().find(container, full, **params)
     
-    def findall(self, container:Optional[Container] = None, **params) -> list[Classes]:
-        return super().findall(container, **params)
+    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[Classes]:
+        return super().findall(container, full, **params)
 
     # TODO: also allow direct definitions of fields
+    # TODO: make behavior default to "adhoc" if field_groups have been defined
     def create(
             self,
             title: str,
@@ -311,8 +357,6 @@ class ClassCollection(ResourceCollection):
             field_groups: list[FieldGroup] = [],
         ):
         assert isinstance(behavior, Behavior), 'Must inherit from a behavior'
-        if type(extends) is not list:
-            extends = [ extends ]
         for field_group in field_groups:
             assert isinstance(field_group, FieldGroup)
         request_hander = RequestHandler(self.api, 'tenant', 'classes')
@@ -337,11 +381,11 @@ class FieldGroupCollection(ResourceCollection):
     def get(self, id) -> FieldGroup:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, **params) -> FieldGroup:
-        return super().find(container, **params)
+    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> FieldGroup:
+        return super().find(container, full, **params)
     
-    def findall(self, container:Optional[Container] = None, **params) -> list[FieldGroup]:
-        return super().findall(container, **params)
+    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[FieldGroup]:
+        return super().findall(container, full, **params)
 
 class FieldGroup(Resource):
     @classmethod
@@ -374,11 +418,11 @@ class DataTypeCollection(ResourceCollection):
     def get(self, id) -> DataType:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, **params) -> DataType:
-        return super().find(container, **params)
+    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> DataType:
+        return super().find(container, full, **params)
     
-    def findall(self, container:Optional[Container] = None, **params) -> list[DataType]:
-        return super().findall(container, **params)
+    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[DataType]:
+        return super().findall(container, full, **params)
 
 class DataType(Resource):
     pass
@@ -387,26 +431,44 @@ class BehaviorCollection(ResourceCollection):
     def __init__(self, api: Api):
         super().__init__(api, resources=['behaviors'])
     
-    @property
+    @cached_property
     def adhoc(self):
-        return self.get('_xdm.data.adhoc')
+        return Behavior(
+            RequestHandler(self.api, container='global', resource='behaviors'),
+            {
+                '$id': 'https://ns.adobe.com/xdm/data/adhoc',
+                'title': 'Ad Hoc Schema'
+            }
+        )
     
-    @property
+    @cached_property
     def record(self):
-        return self.get('_xdm.data.record')
+        return Behavior(
+            RequestHandler(self.api, container='global', resource='behaviors'),
+            {
+                '$id': 'https://ns.adobe.com/xdm/data/record',
+                'title': 'Record Schema'
+            }
+        )
 
-    @property
+    @cached_property
     def time_series(self):
-        return self.get('_xdm.data.time-series')
+        return Behavior(
+            RequestHandler(self.api, container='global', resource='behaviors'),
+            {
+                '$id': 'https://ns.adobe.com/xdm/data/time-series',
+                'title': 'Time-series Schema'
+            }
+        )
 
     def get(self, id) -> Behavior:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, **params) -> Behavior:
-        return super().find(container, **params)
+    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> Behavior:
+        return super().find(container, full, **params)
     
-    def findall(self, container:Optional[Container] = None, **params) -> list[Behavior]:
-        return super().findall(container, **params)
+    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[Behavior]:
+        return super().findall(container, full, **params)
 
 class Behavior(Resource):
     pass
