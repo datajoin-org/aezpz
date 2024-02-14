@@ -1,1 +1,1 @@
-::: adobe_xdm.schema
+::: aezpz.schema
