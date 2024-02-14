@@ -4,4 +4,4 @@ reference for the technical implementation of the
 `calculator` project code.
 
 
-::: aeip.api
+::: adobe_xdm.api

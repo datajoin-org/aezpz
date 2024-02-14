@@ -116,8 +116,8 @@ def load_config(config_file: str) -> Api:
     """ Initialize the api from a config file
 
     Examples:
-        >>> import aeip
-        >>> api = aeip.load_config("auth.json")
+        >>> import adobe_xdm
+        >>> api = adobe_xdm.load_config("auth.json")
     
     Args:
         config_file: The filepath of your json config file that you downloaded from AEP

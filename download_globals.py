@@ -1,9 +1,9 @@
-import aeip
+import adobe_xdm
 import pandas as pd
 import json
 from pathlib import Path
 
-api = aeip.load_config('auth.json')
+api = adobe_xdm.load_config('auth.json')
 global_resource_types = {}
 
 def add_resource_type(resources, resource_type):
@@ -16,5 +16,5 @@ add_resource_type(api.field_groups.findall(container='global'), 'fieldgroups')
 add_resource_type(api.data_types.findall(container='global'), 'datatypes')
 add_resource_type(api.behaviors.findall(container='global'), 'behaviors')
 
-f = Path(__file__).absolute().parent / 'aeip/globals.json'
+f = Path(__file__).absolute().parent / 'adobe_xdm/globals.json'
 json.dump(global_resource_types, f.open('w'), indent='  ')
