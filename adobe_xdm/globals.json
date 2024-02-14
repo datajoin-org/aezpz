@@ -34,8 +34,6 @@
   "xdm.descriptors.descriptorLabel": "schemas https://ns.adobe.com/xdm/descriptors/descriptorLabel",
   "xdm.common.descriptors.descriptorPrimaryKey": "schemas https://ns.adobe.com/xdm/common/descriptors/descriptorPrimaryKey",
   "xdm.common.descriptors.searchdescriptor": "schemas https://ns.adobe.com/xdm/common/descriptors/searchdescriptor",
-  "xdm.common.descriptors.alternateDisplayInfo": "schemas https://ns.adobe.com/xdm/common/descriptors/alternateDisplayInfo",
-  "xdm.common.descriptors.descriptorMetaEnumRemove": "schemas https://ns.adobe.com/xdm/common/descriptors/descriptorMetaEnumRemove",
   "xdm.common.descriptors.descriptorOneToMany": "schemas https://ns.adobe.com/xdm/common/descriptors/descriptorOneToMany",
   "xdm.common.descriptors.descriptorOneToOne": "schemas https://ns.adobe.com/xdm/common/descriptors/descriptorOneToOne",
   "xdm.common.descriptors.eventRelationship": "schemas https://ns.adobe.com/xdm/common/descriptors/eventRelationship",

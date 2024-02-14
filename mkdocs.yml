@@ -1,14 +1,43 @@
 site_name: Adobe XDM Docs
 
 theme:
-  name: "material"
+  name: 'material'
 
 plugins:
-  - mkdocstrings
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            allow_inspection: true
+            show_source: true
+            filters:
+              - "!^_"
+            heading_level: 2
+            docstring_section_style: table
+            show_root_toc_entry: false
+            group_by_category: false
+            members_order: source
+            inherited_members: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
 
 nav:
   - Welcome: index.md
   - tutorials.md
   - How-To Guides: how-to-guides.md
-  - reference.md
+  - Reference:
+    - reference/api.md
+    - reference/schema.md
   - explanation.md
+
+watch:
+  - adobe_xdm

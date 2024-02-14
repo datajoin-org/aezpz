@@ -111,7 +111,19 @@ def get_resource_path(container: Container, resource: ResourceType, id=None):
     return path
 
 class ResourceCollection:
-    """ Responsible for handling requests for a collection of resources (get, search, create) """
+    """ Base class for all resource collections. 
+    Can be used directly through the `registry` attribute of the API Instance to
+    retrieve resources of any type
+
+    Methods:
+        get: Retrieves a resource based on the provided reference.
+        find: Finds a resource based on the specified parameters.
+        findall: Finds all resources based on the specified parameters.
+
+    Examples:
+        >>> api.registry.findall()
+        [<Class xdm.classes.summarymetrics>, <Schema 7a5416d13571>, ...]
+    """
     api: Api
     container: Optional[Container]
     resources: list[ResourceType]
@@ -133,29 +145,54 @@ class ResourceCollection:
         self.container = container
     
     @cached_property
-    def containers(self):
+    def containers(self) -> list[Container]:
         containers = ['tenant','global']
         if self.container is not None:
             containers = [ self.container ]
         return containers
     
-    def get(self, ref) -> Resource:
+    def get(self, ref: str) -> Resource:
+        """
+        Retrieves a resource based on the provided reference.
+
+        Args:
+            ref: The `$id` or `meta:altId` of the reference to retrieve.
+
+        Returns:
+            Resource: The retrieved resource.
+        """
         ref = SchemaRef(ref)
         assert ref.resource in self.resources
         return ref.init(self.api)
 
     def find(self,
-             container: Optional[Container] = None,
              full: bool = True,
              **params) -> Resource:
-        resources = self.findall(container=container, full=full, **params)
+        """
+        Finds a resource based on the specified parameters.
+
+        Args:
+            full: If True will use `vnd.adobe.xed-full+json` accept header.
+            **params: Additional parameters for filtering the resources.
+
+        Returns:
+            Resource: The found resource.
+
+        Raises:
+            Exception: If no resource is found or multiple resources match the parameters.
+        
+        Examples:
+            >>> api.registry.find(title='My Schema')
+            <Schema 7a5416d13571 title="My Schema" version="1.0">
+        """
+        resources = self.findall(full=full, **params)
         if len(resources) == 0:
             raise Exception(f'Could not find resource')
         if len(resources) > 1:
             raise Exception(f'Multiple resources match the parameters')
         return resources[0]
 
-    def _paginate(self, container, resource, full: bool = False, query: dict = {}):
+    def _paginate(self, container, resource, full: bool = False, query: dict = {}) -> list[dict]:
         records = []
         params = {}
         if len(query):
@@ -180,17 +217,26 @@ class ResourceCollection:
         return records
 
     def findall(self,
-               container: Optional[Container] = None,
                full: bool = False,
                **query
             ) -> list[Resource]:
-        containers = self.containers
-        if container is not None:
-            assert container in containers
-            containers = [ container ]
+        """
+        Finds all resources based on the specified parameters.
+
+        Args:
+            full: If True will use `vnd.adobe.xed-full+json` accept header. Defaults to True.
+            **query: Additional query parameters for filtering the resources.
+
+        Returns:
+            List[Resource]: The list of found resources.
+        
+        Examples:
+            >>> api.registry.findall()
+            [<Class xdm.classes.summarymetrics>, <Schema 7a5416d13571>, ...]
+        """
         results = []
         for resource in self.resources:
-            for container in containers:
+            for container in self.containers:
                 for record in self._paginate(container, resource, full, query=query):
                     results.append(resource._class(self.api, record))
         return results
@@ -210,9 +256,52 @@ class ResourceCollection:
         return self.resources[0]._class(self.api, r)
 
 class Resource:
+    """ Base class for all resources.
+    
+    Attributes:
+        body: The raw body of the resource.
+        id: The `meta:altId` of the resource.
+        ref: The `$id` of the resource.
+        uuid: The unique identifier part of the id or ref.
+        container: The container of the resource either "global" or "tenant".
+        tenant: The tenant name used in the resource id. Available only for tenant resources.
+
+        version: The version of the resource.
+        title: The title of the resource.
+        description: The description of the resource.
+        extends: The list of resources that the resource extends.
+    
+    Methods:
+        get: Refreshes the data to be in sync with the server.
+        delete: Deletes the resource.
+    
+    Examples:
+        >>> schema = api.schemas.get('_mytenant.schemas.7a5416d13572')
+        <Schema 7a5416d13572 title="My Schema" version="1.0">
+
+        Update the title of a schema (will send a PATCH request to the server)
+        >>> schema.title = 'My New Schema'
+
+        Update the description of a schema
+        >>> schema.description = 'My new test schema'
+
+        Get attribute from the raw response body
+        >>> schema.body['meta:altId']
+        '_mytenant.schemas.7a5416d13572'
+        
+        Delete the schema
+        >>> schema.delete()
+    """
+
     api: Api
     body: dict
     type: ResourceType
+
+    id: str
+    ref: str
+    uuid: str
+    tenant: Optional[str]
+    container: Container
 
     def __init__(self, api: Api, body):
         if type(body) is str:
@@ -256,13 +345,13 @@ class Resource:
         return self
     
     @property
-    def version(self):
+    def version(self) -> str:
         if 'version' not in self.body:
             self.get(full=False)
         return self.body['version']
     
     @property
-    def title(self):
+    def title(self) -> str:
         if 'title' not in self.body:
             self.get(full=False)
         return self.body['title']
@@ -276,7 +365,7 @@ class Resource:
         }])
 
     @property
-    def description(self):
+    def description(self) -> str:
         if 'description' not in self.body:
             self.get(full=False)
         return self.body['description']
@@ -290,14 +379,14 @@ class Resource:
         }])
     
     @property
-    def properties(self):
+    def properties(self) -> dict[str, dict]:
         if 'properties' not in self.body:
             self.get(full=True)
         self.body.setdefault('properties', {})
         return self.body['properties']
 
     @property
-    def definitions(self):
+    def definitions(self) -> dict[str, dict]:
         if 'allOf' not in self.body:
             self.get(full=False)
         self.body.setdefault('allOf', [])
@@ -343,17 +432,48 @@ class Resource:
         )
 
 class SchemaCollection(ResourceCollection):
+    """ Collection of Schema resources.
+    
+    Initialized through `api.schemas`, `api.global_schemas`, or `api.tenant_schemas`.
+    
+    Methods:
+        get: Retrieves a schema based on the provided reference.
+        find: Finds a schema based on the specified parameters.
+        findall: Finds all schemas based on the specified parameters.
+        create: Creates a new schema.
+    
+    Examples:
+        Get a schema by reference
+        >>> api.schemas.get('_mytenant.schemas.7a5416d13572')
+        <Schema 7a5416d13572 title="My Schema" version="1.0">
+
+        Find a schema by title
+        >>> api.tenant_schemas.find(title='My Schema')
+        <Schema 7a5416d13572 title="My Schema" version="1.0">
+
+        List all global and tenant schemas
+        >>> api.schemas.findall()
+        [<Schema xdm.schemas.computed-attributes>, <Schema 7a5416d13572>, ...]
+
+        List all global schemas
+        >>> api.global_schemas.findall()
+        [<Schema xdm.schemas.computed-attributes>, <Schema xdm.schemas.consentidmap>, ...]
+
+        List all tenant schemas
+        >>> api.tenant_schemas.findall()
+        [<Schema 7a5416d13572>, <Schema 7a5416d13571>, ...]
+    """
     def __init__(self, api: Api, container:Optional[Container]=None):
         super().__init__(api, container=container, resources=[ResourceType.SCHEMA])
     
     def get(self, id) -> Schema:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> Schema:
-        return super().find(container, full, **params)
+    def find(self, full:bool=True, **params) -> Schema:
+        return super().find(full, **params)
     
-    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[Schema]:
-        return super().findall(container, full, **params)
+    def findall(self, full:bool=False, **params) -> list[Schema]:
+        return super().findall(full, **params)
     
     def create(
             self,
@@ -362,6 +482,26 @@ class SchemaCollection(ResourceCollection):
             description: str='',
             field_groups: list[FieldGroup] = [],
         ) -> Schema:
+        """
+        Create a new schema.
+
+        Args:
+            title: The title of the schema.
+            parent: The parent class that the schema inherits from.
+            description: The description of the schema.
+            field_groups: The list of field groups for the schema.
+
+        Returns:
+            Schema: The created schema.
+        
+        Examples:
+            >>> schema = api.schemas.create(
+            ...     title='My Schema',
+            ...     parent=api.classes.get('_xdm.context.profile'),
+            ...     description='My test schema',
+            ...     field_groups=[api.field_groups.get('_mytenant.mixins.f7d78220431')]
+            ... )
+        """
         assert isinstance(parent, Class), 'Must inherit from a class'
         for field_group in field_groups:
             assert isinstance(field_group, FieldGroup)
@@ -377,6 +517,14 @@ class SchemaCollection(ResourceCollection):
 
 
 class Schema(Resource):
+    """ A schema resource.
+
+    Attributes:
+        parent: The parent class that the schema inherits from.
+        behavior: The behavior of the schema.
+        field_groups: The list of field groups used in the schema.
+    """
+
     type = ResourceType.SCHEMA
 
     @property
@@ -403,17 +551,48 @@ class Schema(Resource):
         return self(**r)
 
 class ClassCollection(ResourceCollection):
+    """ Collection of Class resources.
+    
+    Initialized through `api.classes`, `api.global_classes`, or `api.tenant_classes`.
+    
+    Methods:
+        get: Retrieves a class based on the provided reference.
+        find: Finds a class based on the specified parameters.
+        findall: Finds all classes based on the specified parameters.
+        create: Creates a new class.
+    
+    Examples:
+        Get a class by reference
+        >>> api.classes.get('_mytenant.classes.7a5416d13572')
+        <Class 7a5416d13572 title="My Class" version="1.0">
+
+        Find a class by title
+        >>> api.tenant_classes.find(title='My Class')
+        <Class 7a5416d13572 title="My Class" version="1.0">
+
+        List all global and tenant classes
+        >>> api.classes.findall()
+        [<Class xdm.context.profile>, <Class 7a5416d13572>, ...]
+
+        List all global classes
+        >>> api.global_classes.findall()
+        [<Class xdm.context.profile>, <Class xdm.classes.conversion>, ...]
+
+        List all tenant classes
+        >>> api.tenant_classes.findall()
+        [<Class 7a5416d13572>, <Class 7a5416d13571>, ...]
+    """
     def __init__(self, api: Api, container:Optional[Container]=None):
         super().__init__(api, container=container, resources=[ResourceType.CLASS])
     
     def get(self, id) -> Class:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> Class:
-        return super().find(container, full, **params)
+    def find(self, full:bool=True, **params) -> Class:
+        return super().find(full, **params)
     
-    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[Class]:
-        return super().findall(container, full, **params)
+    def findall(self, full:bool=False, **params) -> list[Class]:
+        return super().findall(full, **params)
 
     # TODO: also allow direct definitions of fields
     # TODO: make behavior default to "adhoc" if field_groups have been defined
@@ -424,6 +603,26 @@ class ClassCollection(ResourceCollection):
             description: str = '',
             field_groups: list[FieldGroup] = [],
         ) -> Class:
+        """
+        Create a new class.
+
+        Args:
+            title: The title of the class.
+            behavior: The behavior of the class.
+            description: The description of the class.
+            field_groups: The list of field groups for the class.
+
+        Returns:
+            Class: The created class.
+        
+        Examples:
+            >>> my_class = api.classes.create(
+            ...     title='My Class',
+            ...     behavior=api.behaviors.adhoc,
+            ...     description='My test class',
+            ...     field_groups=[api.field_groups.get('_mytenant.mixins.f7d78220431')]
+            ... )
+        """
         assert isinstance(behavior, Behavior), 'Must inherit from a behavior'
         for field_group in field_groups:
             assert isinstance(field_group, FieldGroup)
@@ -438,6 +637,12 @@ class ClassCollection(ResourceCollection):
         })
 
 class Class(Resource):
+    """ A class resource.
+
+    Attributes:
+        behavior: The behavior of the class.
+        field_groups: The list of field groups used in the class.
+    """
     type = ResourceType.CLASS
     
     @property
@@ -451,31 +656,89 @@ class Class(Resource):
         return [resource for resource in self.extends if resource.type == ResourceType.FIELD_GROUP]
 
 class FieldGroupCollection(ResourceCollection):
+    """ Collection of FieldGroup resources.
+    
+    Initialized through `api.field_groups`, `api.global_field_groups`, or `api.tenant_field_groups`.
+    
+    Methods:
+        get: Retrieves a field group based on the provided reference.
+        find: Finds a field group based on the specified parameters.
+        findall: Finds all field groups based on the specified parameters.
+        create: Creates a new field group.
+    
+    Examples:
+        Get a field group by reference
+        >>> api.field_groups.get('_mytenant.field_groups.7a5416d13572')
+        <FieldGroup 7a5416d13572 title="My Field Group" version="1.0">
+
+        Find a field group by title
+        >>> api.tenant_field_groups.find(title='My Field Group')
+        <FieldGroup 7a5416d13572 title="My Field Group" version="1.0">
+
+        List all global and tenant field groups
+        >>> api.field_groups.findall()
+        [<FieldGroup xdm.context.identitymap>, <FieldGroup 7a5416d13572>, ...]
+
+        List all global field groups
+        >>> api.global_field_groups.findall()
+        [<FieldGroup xdm.context.identitymap>, <FieldGroup xdm.mixins.current-weather>, ...]
+
+        List all tenant field groups
+        >>> api.tenant_field_groups.findall()
+        [<FieldGroup 7a5416d13572>, <FieldGroup 7a5416d13571>, ...]
+    """
     def __init__(self, api: Api, container:Optional[Container]=None):
         super().__init__(api, container=container, resources=[ResourceType.FIELD_GROUP])
 
     def get(self, id) -> FieldGroup:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> FieldGroup:
-        return super().find(container, full, **params)
+    def find(self, full:bool=True, **params) -> FieldGroup:
+        return super().find(full, **params)
     
-    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[FieldGroup]:
-        return super().findall(container, full, **params)
+    def findall(self, full:bool=False, **params) -> list[FieldGroup]:
+        return super().findall(full, **params)
     
     def create(self,
                title: str,
                description: str = '',
                properties: dict[str, dict] = {},
-               extends: list[Class] = [],
+               intendedToExtend: list[Resource] = [],
                ) -> FieldGroup:
-        for r in extends:
-            assert isinstance(r, Class)
+        """
+        Create a new field group.
+
+        Args:
+            title: The title of the field group.
+            description: The description of the field group.
+            properties: The properties of the field group.
+            extends: The resources this field group intends to extend.
+
+        Returns:
+            FieldGroup: The created field group.
+        
+        Examples:
+            >>> field_group = api.field_groups.create(
+            ...     title='My Field Group',
+            ...     description='My test field group',
+            ...     properties={
+            ...         '_mytenant': {
+            ...             'type': 'object',
+            ...             'properties': {
+            ...                 'is_super_star': {'type': 'boolean'},
+            ...             }
+            ...         },
+            ...     }
+            ...     extends=[api.classes.get('_xdm.context.profile')],
+            ... )
+        """
+        for r in intendedToExtend:
+            assert isinstance(r, Resource)
         return self._create({
             'type': 'object',
             'title': title,
             'description': description,
-            'meta:intendedToExtend': [ ctx.ref for ctx in extends ],
+            'meta:intendedToExtend': [ ctx.ref for ctx in intendedToExtend ],
             'allOf': [{
                 'properties': properties,
             }]
@@ -483,33 +746,94 @@ class FieldGroupCollection(ResourceCollection):
         
 
 class FieldGroup(Resource):
+    """ A field group resource.
+
+    Attributes:
+        intendedToExtend: The resources this field group intends to extend.
+    """
     type = ResourceType.FIELD_GROUP
 
     @property
-    def extends(self):
+    def intendedToExtend(self):
         if 'meta:intendedToExtend' not in self.body:
             self.get(full=False)
         self.body.setdefault('meta:intendedToExtend', [])
         return [SchemaRef(ref).init(self.api) for ref in self.body['meta:intendedToExtend']]
 
 class DataTypeCollection(ResourceCollection):
+    """ Collection of DataType resources.
+    
+    Initialized through `api.data_types`, `api.global_data_types`, or `api.tenant_data_types`.
+    
+    Methods:
+        get: Retrieves a data type based on the provided reference.
+        find: Finds a data type based on the specified parameters.
+        findall: Finds all data types based on the specified parameters.
+        create: Creates a new data type.
+    
+    Examples:
+        Get a data type by reference
+        >>> api.data_types.get('_mytenant.data_types.7a5416d13572')
+        <DataType 7a5416d13572 title="My Data Type" version="1.0">
+
+        Find a data type by title
+        >>> api.tenant_data_types.find(title='My Data Type')
+        <DataType 7a5416d13572 title="My Data Type" version="1.0">
+
+        List all global and tenant data types
+        >>> api.data_types.findall()
+        [<DataType xdm.context.person>, <DataType 7a5416d13572>, ...]
+
+        List all global data types
+        >>> api.global_data_types.findall()
+        [<DataType xdm.context.person>, <DataType xdm.context.person-name>, ...]
+
+        List all tenant data types
+        >>> api.tenant_data_types.findall()
+        [<DataType 7a5416d13572>, <DataType 7a5416d13571>, ...]
+    """
     def __init__(self, api: Api, container:Optional[Container]=None):
         super().__init__(api, container=container, resources=[ResourceType.DATA_TYPE])
 
     def get(self, id) -> DataType:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> DataType:
-        return super().find(container, full, **params)
+    def find(self, full:bool=True, **params) -> DataType:
+        return super().find(full, **params)
     
-    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[DataType]:
-        return super().findall(container, full, **params)
+    def findall(self, full:bool=False, **params) -> list[DataType]:
+        return super().findall(full, **params)
     
     def create(self,
-            title: str,
-            description: str = '',
-            properties: dict[str, dict] = {},
-            ) -> DataType:
+               title: str,
+               description: str = '',
+               properties: dict[str, dict] = {},
+               ) -> DataType:
+        """
+        Create a new data type.
+
+        Args:
+            title (str): The title of the data type.
+            description (str, optional): The description of the data type. Defaults to ''.
+            properties (dict[str, dict], optional): The properties of the data type. Defaults to {}.
+
+        Returns:
+            DataType: The created data type.
+
+        Examples:
+            >>> data_type = api.data_types.create(
+            ...     title='My Data Type',
+            ...     description='My test data type',
+            ...     properties={
+            ...         '_mytenant': {
+            ...             'type': 'object',
+            ...             'properties': {
+            ...                 'is_super_star': {'type': 'boolean'},
+            ...             }
+            ...         },
+            ...     }
+            ... )
+        """
         return self._create({
             'type': 'object',
             'title': title,
@@ -518,10 +842,32 @@ class DataTypeCollection(ResourceCollection):
         })
 
 class DataType(Resource):
+    """ A data type resource.
+    """
     type = ResourceType.DATA_TYPE
 
 
 class BehaviorCollection(ResourceCollection):
+    """ Collection of Behavior resources.
+    
+    Initialized through `api.behaviors`.
+    
+    Attributes:
+        adhoc: The adhoc behavior.
+        record: The record behavior.
+        time_series: The time series behavior.
+    
+    Examples:
+        >>> api.behaviors.adhoc
+        <Behavior xdm.data.adhoc>
+
+        >>> api.behaviors.record
+        <Behavior xdm.data.record>
+
+        >>> api.behaviors.time_series
+        <Behavior xdm.data.time-series>
+    """
+
     adhoc: Behavior
     record: Behavior
     time_series: Behavior
@@ -535,11 +881,13 @@ class BehaviorCollection(ResourceCollection):
     def get(self, id) -> Behavior:
         return super().get(id)
     
-    def find(self, container:Optional[Container] = None, full:bool=True, **params) -> Behavior:
-        return super().find(container, full, **params)
+    def find(self, full:bool=True, **params) -> Behavior:
+        return super().find(full, **params)
     
-    def findall(self, container:Optional[Container] = None, full:bool=False, **params) -> list[Behavior]:
-        return super().findall(container, full, **params)
+    def findall(self, full:bool=False, **params) -> list[Behavior]:
+        return super().findall(full, **params)
 
 class Behavior(Resource):
+    """ A behavior resource.
+    """
     type = ResourceType.BEHAVIOR
