@@ -113,9 +113,10 @@ def get_resource_path(container: Container, resource: ResourceType, id=None):
 class ResourceCollection:
     """ Responsible for handling requests for a collection of resources (get, search, create) """
     api: Api
+    container: Optional[Container]
     resources: list[ResourceType]
 
-    def __init__(self, api: Api, resources: list[ResourceType] = []):
+    def __init__(self, api: Api, container:Optional[Container]=None, resources:list[ResourceType]=[]):
         self.api = api
         if len(resources) == 0:
             resources = [
@@ -125,7 +126,18 @@ class ResourceCollection:
                 ResourceType.CLASS,
                 ResourceType.BEHAVIOR,
             ]
+        assert container is None or container in ('global','tenant')
+        for resource in resources:
+            assert isinstance(resource, ResourceType)
         self.resources = resources
+        self.container = container
+    
+    @cached_property
+    def containers(self):
+        containers = ['tenant','global']
+        if self.container is not None:
+            containers = [ self.container ]
+        return containers
     
     def get(self, ref) -> Resource:
         ref = SchemaRef(ref)
@@ -172,9 +184,9 @@ class ResourceCollection:
                full: bool = False,
                **query
             ) -> list[Resource]:
-        containers = ['tenant','global']
+        containers = self.containers
         if container is not None:
-            assert container in ('tenant','global')
+            assert container in containers
             containers = [ container ]
         results = []
         for resource in self.resources:
@@ -184,6 +196,8 @@ class ResourceCollection:
         return results
     
     def _create(self, body) -> Resource:
+        if self.container == 'global':
+            raise Exception('cannot create global resource')
         assert len(self.resources) == 1
         r = self.api.request('POST',
             path=get_resource_path(
@@ -329,8 +343,8 @@ class Resource:
         )
 
 class SchemaCollection(ResourceCollection):
-    def __init__(self, api: Api):
-        super().__init__(api, resources=[ResourceType.SCHEMA])
+    def __init__(self, api: Api, container:Optional[Container]=None):
+        super().__init__(api, container=container, resources=[ResourceType.SCHEMA])
     
     def get(self, id) -> Schema:
         return super().get(id)
@@ -389,8 +403,8 @@ class Schema(Resource):
         return self(**r)
 
 class ClassCollection(ResourceCollection):
-    def __init__(self, api: Api):
-        super().__init__(api, resources=[ResourceType.CLASS])
+    def __init__(self, api: Api, container:Optional[Container]=None):
+        super().__init__(api, container=container, resources=[ResourceType.CLASS])
     
     def get(self, id) -> Class:
         return super().get(id)
@@ -437,8 +451,8 @@ class Class(Resource):
         return [resource for resource in self.extends if resource.type == ResourceType.FIELD_GROUP]
 
 class FieldGroupCollection(ResourceCollection):
-    def __init__(self, api: Api):
-        super().__init__(api, resources=[ResourceType.FIELD_GROUP])
+    def __init__(self, api: Api, container:Optional[Container]=None):
+        super().__init__(api, container=container, resources=[ResourceType.FIELD_GROUP])
 
     def get(self, id) -> FieldGroup:
         return super().get(id)
@@ -479,8 +493,8 @@ class FieldGroup(Resource):
         return [SchemaRef(ref).init(self.api) for ref in self.body['meta:intendedToExtend']]
 
 class DataTypeCollection(ResourceCollection):
-    def __init__(self, api: Api):
-        super().__init__(api, resources=[ResourceType.DATA_TYPE])
+    def __init__(self, api: Api, container:Optional[Container]=None):
+        super().__init__(api, container=container, resources=[ResourceType.DATA_TYPE])
 
     def get(self, id) -> DataType:
         return super().get(id)
@@ -512,8 +526,8 @@ class BehaviorCollection(ResourceCollection):
     record: Behavior
     time_series: Behavior
 
-    def __init__(self, api: Api):
-        super().__init__(api, resources=[ResourceType.BEHAVIOR])
+    def __init__(self, api: Api, container:Optional[Container]=None):
+        super().__init__(api, container=container, resources=[ResourceType.BEHAVIOR])
         self.adhoc = Behavior(self.api, 'https://ns.adobe.com/xdm/data/adhoc')
         self.record = Behavior(self.api, 'https://ns.adobe.com/xdm/data/record')
         self.time_series = Behavior(self.api, 'https://ns.adobe.com/xdm/data/time-series')

@@ -36,12 +36,25 @@ class Api:
         self.verbose = verbose
         self.base_url = 'https://platform.adobe.io'
         self.load_config_file(config_file)
+        self.registry = schema.ResourceCollection(self)
+        self.global_registry = schema.ResourceCollection(self, container='global')
+        self.tenant_registry = schema.ResourceCollection(self, container='tenant')
         self.schemas = schema.SchemaCollection(self)
+        self.global_schemas = schema.SchemaCollection(self, container='global')
+        self.tenant_schemas = schema.SchemaCollection(self, container='tenant')
         self.classes = schema.ClassCollection(self)
+        self.global_classes = schema.ClassCollection(self, container='global')
+        self.tenant_classes = schema.ClassCollection(self, container='tenant')
         self.field_groups = schema.FieldGroupCollection(self)
-        self.behaviors = schema.BehaviorCollection(self)
+        self.global_field_groups = schema.FieldGroupCollection(self, container='global')
+        self.tenant_field_groups = schema.FieldGroupCollection(self, container='tenant')
         self.data_types = schema.DataTypeCollection(self)
-        self.schema_registry = schema.ResourceCollection(self)
+        self.global_data_types = schema.DataTypeCollection(self, container='global')
+        self.tenant_data_types = schema.DataTypeCollection(self, container='tenant')
+        self.behaviors = schema.BehaviorCollection(self)
+    
+    def ref(self, ref):
+        return self.registry.get(ref)
 
     @property
     def sandbox(self):
