@@ -41,4 +41,4 @@ api.schemas.find(title='my_schema')
 
 5. On the Credentials page click the "Download JSON" button to download the credentials file
 
-![Screenshot of credentials page with highlighted download json button](/images/download-creds-screenshot.png)
+![Screenshot of credentials page with highlighted download json button](https://github.com/datajoin-org/aezpz/raw/main/docs/images/download-creds-screenshot.png)
