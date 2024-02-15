@@ -1,4 +1,9 @@
 # Adobe Experience Platform API made easy peasy
+
+[![PyPI version](https://badge.fury.io/py/aezpz.svg)](https://badge.fury.io/py/aezpz)
+
+[Documentation](https://datajoin-org.github.io/aezpz/)
+
 The Adobe Experience Platform API is a RESTful API that uses OAuth 2.0 for authentication. To use the API you'll need to create a project in the Adobe Developer Console and create OAuth Server-to-Server credentials for your project.
 
 This library makes it easy to authenticate with the Adobe Experience Platform API and make requests to the API.
@@ -30,4 +35,4 @@ api.schemas.find(title='my_schema')
 
 5. On the Credentials page click the "Download JSON" button to download the credentials file
 
-![Screenshot of credentials page with highlighted download json button](/docs/images/download-creds-screenshot.png)
+![Screenshot of credentials page with highlighted download json button](https://github.com/datajoin-org/aezpz/raw/main/docs/images/download-creds-screenshot.png)
