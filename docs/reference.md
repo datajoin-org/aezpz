@@ -1,1 +1,3 @@
+::: aezpz.api
+
 ::: aezpz.schema

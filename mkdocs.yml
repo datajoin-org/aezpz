@@ -31,14 +31,20 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - attr_list
+  - md_in_html
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+
+extra_css:
+  - stylesheets/extra.css
 
 nav:
   - Welcome: index.md
   - tutorials.md
-  - How-To Guides: how-to-guides.md
-  - Reference:
-    - reference/api.md
-    - reference/schema.md
+  - guides.md
+  - reference.md
   - explanation.md
 
 watch:

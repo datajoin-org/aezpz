@@ -483,7 +483,7 @@ class FieldGroupCollection(ResourceCollection):
             title: The title of the field group.
             description: The description of the field group.
             properties: The properties of the field group.
-            extends: The resources this field group intends to extend.
+            intendedToExtend: The resources this field group intends to extend.
 
         Returns:
             FieldGroup: The created field group.
@@ -500,7 +500,7 @@ class FieldGroupCollection(ResourceCollection):
             ...             }
             ...         },
             ...     }
-            ...     extends=[api.classes.get('_xdm.context.profile')],
+            ...     intendedToExtend=[api.classes.get('_xdm.context.profile')],
             ... )
         """
         for r in intendedToExtend:
