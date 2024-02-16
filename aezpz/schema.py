@@ -118,10 +118,10 @@ class ResourceCollection:
     Methods:
         get: Retrieves a resource based on the provided reference.
         find: Finds a resource based on the specified parameters.
-        findall: Finds all resources based on the specified parameters.
+        list: Finds all resources based on the specified parameters.
 
     Examples:
-        >>> api.registry.findall()
+        >>> api.registry.list()
         [<Class xdm.classes.summarymetrics>, <Schema 7a5416d13571>, ...]
     """
     api: Api
@@ -185,7 +185,7 @@ class ResourceCollection:
             >>> api.registry.find(title='My Schema')
             <Schema 7a5416d13571 title="My Schema" version="1.0">
         """
-        resources = self.findall(full=full, **params)
+        resources = self.list(full=full, **params)
         if len(resources) == 0:
             raise Exception(f'Could not find resource')
         if len(resources) > 1:
@@ -216,7 +216,7 @@ class ResourceCollection:
                 more = False
         return records
 
-    def findall(self,
+    def list(self,
                full: bool = False,
                **query
             ) -> list[Resource]:
@@ -231,7 +231,7 @@ class ResourceCollection:
             List[Resource]: The list of found resources.
         
         Examples:
-            >>> api.registry.findall()
+            >>> api.registry.list()
             [<Class xdm.classes.summarymetrics>, <Schema 7a5416d13571>, ...]
         """
         results = []
@@ -263,7 +263,7 @@ class SchemaCollection(ResourceCollection):
     Methods:
         get: Retrieves a schema based on the provided reference.
         find: Finds a schema based on the specified parameters.
-        findall: Finds all schemas based on the specified parameters.
+        list: Finds all schemas based on the specified parameters.
         create: Creates a new schema.
     
     Examples:
@@ -276,15 +276,15 @@ class SchemaCollection(ResourceCollection):
         <Schema 7a5416d13572 title="My Schema" version="1.0">
 
         List all global and tenant schemas
-        >>> api.schemas.findall()
+        >>> api.schemas.list()
         [<Schema xdm.schemas.computed-attributes>, <Schema 7a5416d13572>, ...]
 
         List all global schemas
-        >>> api.global_schemas.findall()
+        >>> api.global_schemas.list()
         [<Schema xdm.schemas.computed-attributes>, <Schema xdm.schemas.consentidmap>, ...]
 
         List all tenant schemas
-        >>> api.tenant_schemas.findall()
+        >>> api.tenant_schemas.list()
         [<Schema 7a5416d13572>, <Schema 7a5416d13571>, ...]
     """
     def __init__(self, api: Api, container:Optional[Container]=None):
@@ -296,8 +296,8 @@ class SchemaCollection(ResourceCollection):
     def find(self, full:bool=True, **params) -> Schema:
         return super().find(full, **params)
     
-    def findall(self, full:bool=False, **params) -> list[Schema]:
-        return super().findall(full, **params)
+    def list(self, full:bool=False, **params) -> list[Schema]:
+        return super().list(full, **params)
     
     def create(
             self,
@@ -348,7 +348,7 @@ class ClassCollection(ResourceCollection):
     Methods:
         get: Retrieves a class based on the provided reference.
         find: Finds a class based on the specified parameters.
-        findall: Finds all classes based on the specified parameters.
+        list: Finds all classes based on the specified parameters.
         create: Creates a new class.
     
     Examples:
@@ -361,15 +361,15 @@ class ClassCollection(ResourceCollection):
         <Class 7a5416d13572 title="My Class" version="1.0">
 
         List all global and tenant classes
-        >>> api.classes.findall()
+        >>> api.classes.list()
         [<Class xdm.context.profile>, <Class 7a5416d13572>, ...]
 
         List all global classes
-        >>> api.global_classes.findall()
+        >>> api.global_classes.list()
         [<Class xdm.context.profile>, <Class xdm.classes.conversion>, ...]
 
         List all tenant classes
-        >>> api.tenant_classes.findall()
+        >>> api.tenant_classes.list()
         [<Class 7a5416d13572>, <Class 7a5416d13571>, ...]
     """
     def __init__(self, api: Api, container:Optional[Container]=None):
@@ -381,8 +381,8 @@ class ClassCollection(ResourceCollection):
     def find(self, full:bool=True, **params) -> Class:
         return super().find(full, **params)
     
-    def findall(self, full:bool=False, **params) -> list[Class]:
-        return super().findall(full, **params)
+    def list(self, full:bool=False, **params) -> list[Class]:
+        return super().list(full, **params)
 
     # TODO: also allow direct definitions of fields
     # TODO: make behavior default to "adhoc" if field_groups have been defined
@@ -434,7 +434,7 @@ class FieldGroupCollection(ResourceCollection):
     Methods:
         get: Retrieves a field group based on the provided reference.
         find: Finds a field group based on the specified parameters.
-        findall: Finds all field groups based on the specified parameters.
+        list: Finds all field groups based on the specified parameters.
         create: Creates a new field group.
     
     Examples:
@@ -447,15 +447,15 @@ class FieldGroupCollection(ResourceCollection):
         <FieldGroup 7a5416d13572 title="My Field Group" version="1.0">
 
         List all global and tenant field groups
-        >>> api.field_groups.findall()
+        >>> api.field_groups.list()
         [<FieldGroup xdm.context.identitymap>, <FieldGroup 7a5416d13572>, ...]
 
         List all global field groups
-        >>> api.global_field_groups.findall()
+        >>> api.global_field_groups.list()
         [<FieldGroup xdm.context.identitymap>, <FieldGroup xdm.mixins.current-weather>, ...]
 
         List all tenant field groups
-        >>> api.tenant_field_groups.findall()
+        >>> api.tenant_field_groups.list()
         [<FieldGroup 7a5416d13572>, <FieldGroup 7a5416d13571>, ...]
     """
     def __init__(self, api: Api, container:Optional[Container]=None):
@@ -467,8 +467,8 @@ class FieldGroupCollection(ResourceCollection):
     def find(self, full:bool=True, **params) -> FieldGroup:
         return super().find(full, **params)
     
-    def findall(self, full:bool=False, **params) -> list[FieldGroup]:
-        return super().findall(full, **params)
+    def list(self, full:bool=False, **params) -> list[FieldGroup]:
+        return super().list(full, **params)
     
     def create(self,
                title: str,
@@ -523,7 +523,7 @@ class DataTypeCollection(ResourceCollection):
     Methods:
         get: Retrieves a data type based on the provided reference.
         find: Finds a data type based on the specified parameters.
-        findall: Finds all data types based on the specified parameters.
+        list: Finds all data types based on the specified parameters.
         create: Creates a new data type.
     
     Examples:
@@ -536,15 +536,15 @@ class DataTypeCollection(ResourceCollection):
         <DataType 7a5416d13572 title="My Data Type" version="1.0">
 
         List all global and tenant data types
-        >>> api.data_types.findall()
+        >>> api.data_types.list()
         [<DataType xdm.context.person>, <DataType 7a5416d13572>, ...]
 
         List all global data types
-        >>> api.global_data_types.findall()
+        >>> api.global_data_types.list()
         [<DataType xdm.context.person>, <DataType xdm.context.person-name>, ...]
 
         List all tenant data types
-        >>> api.tenant_data_types.findall()
+        >>> api.tenant_data_types.list()
         [<DataType 7a5416d13572>, <DataType 7a5416d13571>, ...]
     """
     def __init__(self, api: Api, container:Optional[Container]=None):
@@ -556,8 +556,8 @@ class DataTypeCollection(ResourceCollection):
     def find(self, full:bool=True, **params) -> DataType:
         return super().find(full, **params)
     
-    def findall(self, full:bool=False, **params) -> list[DataType]:
-        return super().findall(full, **params)
+    def list(self, full:bool=False, **params) -> list[DataType]:
+        return super().list(full, **params)
     
     def create(self,
                title: str,
@@ -634,8 +634,8 @@ class BehaviorCollection(ResourceCollection):
     def find(self, full:bool=True, **params) -> Behavior:
         return super().find(full, **params)
     
-    def findall(self, full:bool=False, **params) -> list[Behavior]:
-        return super().findall(full, **params)
+    def list(self, full:bool=False, **params) -> list[Behavior]:
+        return super().list(full, **params)
 
 class Resource:
     """ Base class for all resources.

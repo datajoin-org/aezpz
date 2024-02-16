@@ -2,7 +2,7 @@ from __future__ import annotations
 import requests
 import json
 from pathlib import Path
-from . import schema
+from . import schema, datasets
 from typing import Optional
 
 def load_config(config_file: str) -> Api:
@@ -99,6 +99,8 @@ class Api:
         self.global_data_types = schema.DataTypeCollection(self, container='global')
         self.tenant_data_types = schema.DataTypeCollection(self, container='tenant')
         self.behaviors = schema.BehaviorCollection(self)
+        
+        self.datasets = datasets.DatasetCollection(self)
     
     def ref(self, ref: str) -> schema.Resource:
         """
