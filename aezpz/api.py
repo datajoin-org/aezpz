@@ -77,6 +77,8 @@ class Api:
     global_data_types: schema.DataTypeCollection
     tenant_data_types: schema.DataTypeCollection
     behaviors: schema.BehaviorCollection
+    datasets: datasets.DatasetCollection
+    batches: datasets.BatchCollection
 
     def __init__(self, config_file, verbose=True, sandbox='prod'):
         self.headers = { 'x-sandbox-name': sandbox }
@@ -101,6 +103,7 @@ class Api:
         self.behaviors = schema.BehaviorCollection(self)
         
         self.datasets = datasets.DatasetCollection(self)
+        self.batches = datasets.BatchCollection(self)
     
     def ref(self, ref: str) -> schema.Resource:
         """
