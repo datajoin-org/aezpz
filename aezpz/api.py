@@ -5,7 +5,7 @@ from pathlib import Path
 from . import schema, datasets
 from typing import Optional
 
-def load_config(config_file: str) -> Api:
+def load_config(config_file: str, verbose: bool=True, sandbox: str='prod') -> Api:
     """ Initialize the api from a config file
 
     Examples:
@@ -14,11 +14,13 @@ def load_config(config_file: str) -> Api:
     
     Args:
         config_file: The filepath of your json config file that you downloaded from AEP
+        verbose: Whether to print the status code of every request. Defaults to True
+        sandbox: The name of the sandbox to use. Defaults to 'prod'
     
     Returns:
         The initialized api interface
     """
-    return Api(config_file)
+    return Api(config_file, verbose=verbose, sandbox=sandbox)
 
 class Api:
     """The main interface to the Adobe XDM API
@@ -58,7 +60,9 @@ class Api:
     """
 
     base_url: str
-    headers: dict[str, str]
+    sandbox: str
+    access_token: str
+    config: dict
     verbose: bool
 
     registry: schema.ResourceCollection
@@ -81,10 +85,11 @@ class Api:
     batches: datasets.BatchCollection
 
     def __init__(self, config_file, verbose=True, sandbox='prod'):
-        self.headers = { 'x-sandbox-name': sandbox }
+        self.sandbox = sandbox
         self.verbose = verbose
         self.base_url = 'https://platform.adobe.io'
-        self.load_config_file(config_file)
+        self.config = self.load_config_file(config_file)
+        self.access_token = self.authenticate()
         self.registry = schema.ResourceCollection(self)
         self.global_registry = schema.ResourceCollection(self, container='global')
         self.tenant_registry = schema.ResourceCollection(self, container='tenant')
@@ -125,33 +130,39 @@ class Api:
         return self.registry.get(ref)
 
     @property
-    def sandbox(self) -> str:
-        return self.headers['x-sandbox-name']
+    def headers(self) -> dict:
+        assert getattr(self, 'config', None) and getattr(self, 'access_token', None), 'need to authenticate first'
+        return {
+            'x-sandbox-name': self.sandbox,
+            'x-api-key': self.config['CLIENT_ID'],
+            'x-gw-ims-org-id': self.config['ORG_ID'],
+            'Authorization': 'Bearer ' + self.access_token,
+        }
 
-    @sandbox.setter
-    def sandbox(self, value: str):
-        assert isinstance(value, str)
-        self.headers['x-sandbox-name'] = value
+    @property
+    def me(self) -> str:
+        return self.config['ACCOUNT_ID']
+
+    def load_config_file(self, config_file) -> dict:
+        config = json.load(Path(config_file).open('r'))
+        return {
+            'CLIENT_ID': config['CLIENT_ID'],
+            'ORG_ID': config['ORG_ID'],
+            'CLIENT_SECRET': config['CLIENT_SECRETS'][0],
+            'SCOPES': config['SCOPES'],
+            'ORG_ID': config['ORG_ID'],
+            'ACCOUNT_ID': config['TECHNICAL_ACCOUNT_ID'],
+        }
     
-    def load_config_file(self, config_file):
-        auth = json.load(Path(config_file).open('r'))
-        self.headers['x-api-key'] = auth['CLIENT_ID']
-        self.headers['x-gw-ims-org-id'] = auth['ORG_ID']
-        self.authenticate(
-            client_id=auth['CLIENT_ID'],
-            client_secret=auth['CLIENT_SECRETS'][0],
-            scopes=auth['SCOPES'],
-        )
-    
-    def authenticate(self, client_id, client_secret, scopes):
+    def authenticate(self) -> str:
         r = requests.post('https://ims-na1.adobelogin.com/ims/token/v2', params={
             'grant_type': 'client_credentials',
-            'client_id': client_id,
-            'client_secret': client_secret,
-            'scope': ','.join(scopes)
+            'client_id': self.config['CLIENT_ID'],
+            'client_secret': self.config['CLIENT_SECRET'],
+            'scope': ','.join(self.config['SCOPES'])
         })
         r.raise_for_status()
-        self.headers['Authorization'] = 'Bearer ' + r.json()['access_token']
+        return r.json()['access_token']
 
     def request(self, method, path, headers={}, **kwargs) -> Optional[dict]:
         """
