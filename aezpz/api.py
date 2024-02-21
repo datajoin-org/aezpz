@@ -61,9 +61,9 @@ class Api:
 
     base_url: str
     sandbox: str
-    access_token: str
-    config: dict
     verbose: bool
+    _access_token: str
+    _config: dict
 
     registry: schema.ResourceCollection
     global_registry: schema.ResourceCollection
@@ -88,8 +88,8 @@ class Api:
         self.sandbox = sandbox
         self.verbose = verbose
         self.base_url = 'https://platform.adobe.io'
-        self.config = self.load_config_file(config_file)
-        self.access_token = self.authenticate()
+        self._config = self.load_config_file(config_file)
+        self._access_token = self.authenticate()
         self.registry = schema.ResourceCollection(self)
         self.global_registry = schema.ResourceCollection(self, container='global')
         self.tenant_registry = schema.ResourceCollection(self, container='tenant')
@@ -134,14 +134,14 @@ class Api:
         assert getattr(self, 'config', None) and getattr(self, 'access_token', None), 'need to authenticate first'
         return {
             'x-sandbox-name': self.sandbox,
-            'x-api-key': self.config['CLIENT_ID'],
-            'x-gw-ims-org-id': self.config['ORG_ID'],
-            'Authorization': 'Bearer ' + self.access_token,
+            'x-api-key': self._config['CLIENT_ID'],
+            'x-gw-ims-org-id': self._config['ORG_ID'],
+            'Authorization': 'Bearer ' + self._access_token,
         }
 
     @property
     def me(self) -> str:
-        return self.config['ACCOUNT_ID']
+        return self._config['ACCOUNT_ID']
 
     def load_config_file(self, config_file) -> dict:
         config = json.load(Path(config_file).open('r'))
@@ -157,9 +157,9 @@ class Api:
     def authenticate(self) -> str:
         r = requests.post('https://ims-na1.adobelogin.com/ims/token/v2', params={
             'grant_type': 'client_credentials',
-            'client_id': self.config['CLIENT_ID'],
-            'client_secret': self.config['CLIENT_SECRET'],
-            'scope': ','.join(self.config['SCOPES'])
+            'client_id': self._config['CLIENT_ID'],
+            'client_secret': self._config['CLIENT_SECRET'],
+            'scope': ','.join(self._config['SCOPES'])
         })
         r.raise_for_status()
         return r.json()['access_token']
